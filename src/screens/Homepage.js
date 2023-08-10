@@ -10,10 +10,13 @@ import db from "../db/Database";
 import HomeTransactionComponent from "../components/HomeTransactionComponent";
 import { ScrollView } from "react-native";
 import { useStore } from "../state/Store";
+import DayBar from "../components/DayBar";
 export default function Homepage({ navigation }) {
   const [month, setMonth] = useState(getTodayMonth());
   const transactions = useStore((store) => store.transactions);
   const setTransactions = useStore((store) => store.setStore);
+  const [groupedTransactions, setGroupedTransactions] = useState([]);
+
   //console.log(transactions);
 
   function getTodayMonth() {
@@ -31,13 +34,17 @@ export default function Homepage({ navigation }) {
     db.transaction((tx) => {
       tx.executeSql(
         "SELECT * FROM transactions WHERE strftime('%m', date) = ? ORDER BY date DESC",
-        [getTodayMonth()],
-        (txObj, resultSet) => {
-          console.log(resultSet.rows._array);
-          setTransactions(resultSet.rows._array),
-            (txObj, error) => {
-              console.log(error);
-            };
+        [month],
+        (_, { rows: { _array } }) => {
+          const grouped = _array.reduce((acc, transaction) => {
+            const date = transaction.date.split(" ")[0];
+            if (!acc[date]) {
+              acc[date] = [];
+            }
+            acc[date].push(transaction);
+            return acc;
+          }, {});
+          setGroupedTransactions(Object.entries(grouped));
         }
       );
     });
@@ -48,36 +55,26 @@ export default function Homepage({ navigation }) {
       tx.executeSql(
         "SELECT * FROM transactions WHERE strftime('%m', date) = ? ORDER BY date DESC",
         [month],
-        (txObj, resultSet) => {
-          console.log(resultSet.rows._array);
-          setTransactions(resultSet.rows._array),
-            (txObj, error) => {
-              console.log(error);
-            };
+        (_, { rows: { _array } }) => {
+          const grouped = _array.reduce((acc, transaction) => {
+            const date = transaction.date.split(" ")[0];
+            if (!acc[date]) {
+              acc[date] = [];
+            }
+            acc[date].push(transaction);
+            return acc;
+          }, {});
+          setGroupedTransactions(Object.entries(grouped));
         }
       );
     });
-  }, [month]);
+  }, [month, transactions]);
 
-  const addTransaction = (amount) => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        "INSERT INTO transactions (amount) values (?)",
-        [amount],
-        (txObj, resultSet) => {
-          let existingTransactions = [...transactions];
-          existingTransactions.push({ id: resultSet.insertId, amount });
-          setTransactions(existingTransactions);
-        },
-        (txObj, error) => {
-          console.log(error);
-        }
-      );
-    });
-  };
+  console.log(groupedTransactions);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View>
+      <View style={{ borderBottomWidth: 2, borderBottomColor: "grey" }}>
         <MonthBar month={month} setMonth={setMonth} />
         <MoneyInfoSection />
         <ActionButtonComponent navigation={navigation} />
@@ -86,17 +83,20 @@ export default function Homepage({ navigation }) {
         contentContainerStyle={[styles.ScrollView]}
         style={styles.transactionsView}
       >
-        {transactions?.map((transaction) => {
-          return (
-            <HomeTransactionComponent
-              id={transaction.id}
-              key={transaction.id}
-              price={transaction.amount}
-              date={transaction.date}
-              category={transaction.category}
-            />
-          );
-        })}
+        {groupedTransactions?.map(([date, transactions]) => (
+          <>
+            <DayBar date={date} />
+            {transactions?.map((transaction) => (
+              <HomeTransactionComponent
+                key={transaction.id}
+                id={transaction.id}
+                price={transaction.amount}
+                category={transaction.category}
+                date={transaction.date}
+              />
+            ))}
+          </>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -105,6 +105,7 @@ export default function Homepage({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     display: "flex",
+    flex: 1,
   },
   transactionsView: {
     display: "flex",
